@@ -49,6 +49,7 @@ function fitCity(map: MapLibreMap) {
   map.setPadding({ top: 0, right: 0, bottom: 0, left: 0 })
   map.fitBounds(bounds, {
     padding: { top: wide ? 92 : 150, bottom: 78, left: 36, right: wide ? 48 : 28 },
+    pitch: 0,
     duration: 700,
     maxZoom: 11,
   })
@@ -94,13 +95,13 @@ export function MapView({
       minZoom: 9,
       maxZoom: 14,
       pitch: 0,
-      maxPitch: 0,
+      maxPitch: 60,
       attributionControl: false,
-      dragRotate: false,
-      pitchWithRotate: false,
-      touchPitch: false,
+      dragRotate: true,
+      pitchWithRotate: true,
+      touchPitch: true,
     })
-    map.addControl(new NavigationControl({ showCompass: false }), 'bottom-left')
+    map.addControl(new NavigationControl({ showCompass: true, visualizePitch: true }), 'bottom-left')
     map.addControl(new AttributionControl({ compact: true }), 'bottom-right')
     mapRef.current = map
     const observer = new ResizeObserver(() => map.resize())
@@ -112,10 +113,9 @@ export function MapView({
     })
 
     map.on('load', () => {
-      const extrusions = (map.getStyle().layers ?? [])
-        .filter((layer) => layer.type === 'fill-extrusion')
-        .map((layer) => layer.id)
-      for (const id of extrusions) map.removeLayer(id)
+      map.on('zoomend', () => {
+        if (map.getZoom() >= 14 && map.getPitch() < 5) map.easeTo({ pitch: 50, duration: 600 })
+      })
       map.addSource('rail', { type: 'geojson', data: collection(railFeatures(false)) })
       map.addSource('spur', { type: 'geojson', data: collection(railFeatures(true)) })
       map.addSource('stations', { type: 'geojson', data: collection(stationFeatures()) })
