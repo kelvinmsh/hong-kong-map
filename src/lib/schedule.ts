@@ -96,7 +96,7 @@ export function readPayload(body: unknown, line: string, station: string): LiveP
   if (rawBlock && typeof rawBlock === 'object') {
     const blockRow = rawBlock as Record<string, unknown>
     block = {
-      currTime: text(blockRow.curr_time) || text(row.curr_time),
+      currTime: text(row.curr_time) || text(blockRow.curr_time),
       sysTime: text(blockRow.sys_time) || text(row.sys_time),
       up: readList(blockRow.UP),
       down: readList(blockRow.DOWN),

@@ -81,13 +81,14 @@ const [routeText, venuePayload] = await Promise.all([
   }),
 ])
 
+const displayNames = { 茘枝角: '荔枝角', 茘景: '荔景' }
 const rows = parseCsv(routeText).filter((row) => row['Line Code'] && row['Station Code'])
 const stations = new Map()
 for (const row of rows) {
   if (!stations.has(row['Station Code'])) {
     stations.set(row['Station Code'], {
       code: row['Station Code'],
-      zh: row['Chinese Name'],
+      zh: displayNames[row['Chinese Name']] ?? row['Chinese Name'],
       en: row['English Name'],
       lines: [],
     })

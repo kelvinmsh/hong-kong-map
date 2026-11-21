@@ -8,6 +8,12 @@ export function useStationBoard(station: StationRecord | undefined) {
   const [loading, setLoading] = useState(true)
   const generation = useRef(0)
   const tail = useRef(Promise.resolve())
+  const shownStation = useRef(station?.code)
+  if (shownStation.current !== station?.code) {
+    shownStation.current = station?.code
+    setBoard([])
+    setLoading(true)
+  }
 
   const load = useCallback((current: StationRecord, announce: boolean) => {
     const id = generation.current

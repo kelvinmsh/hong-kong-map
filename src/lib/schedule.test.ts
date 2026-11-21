@@ -38,6 +38,36 @@ describe('arrival minutes', () => {
     expect(publicMessage(payload.status, payload.message)).toBe('')
   })
 
+  it('counts minutes from the response time when the station time is older', () => {
+    const payload = readPayload(
+      {
+        status: 1,
+        curr_time: '2026-11-21 01:10:42',
+        data: {
+          'EAL-ADM': {
+            curr_time: '2026-11-21 01:10:00',
+            UP: [{ seq: '1', dest: 'LMC', plat: '7', time: '2026-11-21 01:17:00', valid: 'Y' }],
+            DOWN: [],
+          },
+        },
+      },
+      'EAL',
+      'ADM',
+    )
+    expect(payload.block?.currTime).toBe('2026-11-21 01:10:42')
+    const train = displayTrain(payload.block?.up[0] ?? {
+      seq: '1',
+      dest: 'LMC',
+      plat: '7',
+      time: '2026-11-21 01:17:00',
+      ttnt: '',
+      valid: 'Y',
+      route: '',
+      timeType: '',
+    }, payload.block?.currTime ?? '', { LMC: '落馬洲' })
+    expect(train.minuteLabel).toBe('6 分鐘')
+  })
+
   it('describes an East Rail train that runs via the racecourse', () => {
     const train = displayTrain(
       {

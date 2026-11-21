@@ -15,7 +15,7 @@ import type { Camera } from '../lib/cameras.ts'
 setWorkerUrl(workerUrl)
 
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty'
-const PANEL_BREAKPOINT = 640
+const PANEL_BREAKPOINT = 768
 
 function supportsWebGL2() {
   try {
@@ -40,6 +40,14 @@ type MapViewProps = {
 
 function collection<T>(features: T[]) {
   return { type: 'FeatureCollection' as const, features }
+}
+
+function focusPadding(wide: boolean) {
+  if (wide) return { top: 90, right: 390, bottom: 70, left: 30 }
+  const panel = document.getElementById('detail-panel')
+  const top = panel?.getBoundingClientRect().top
+  const bottom = top == null ? 240 : Math.max(24, Math.round(window.innerHeight - top + 12))
+  return { top: 90, right: 20, bottom, left: 30 }
 }
 
 function fitCity(map: MapLibreMap) {
@@ -87,7 +95,9 @@ export function MapView({
   useEffect(() => {
     const container = containerRef.current
     if (!container || !supportsWebGL2()) return
-    const map = new MapLibreMap({
+    let map: MapLibreMap
+    try {
+      map = new MapLibreMap({
       container,
       style: STYLE,
       center: [114.15, 22.35],
@@ -101,6 +111,10 @@ export function MapView({
       pitchWithRotate: true,
       touchPitch: true,
     })
+    } catch {
+      queueMicrotask(() => setFailed(true))
+      return
+    }
     map.addControl(new NavigationControl({ showCompass: true, visualizePitch: true }), 'bottom-left')
     map.addControl(new AttributionControl({ compact: true }), 'bottom-right')
     mapRef.current = map
@@ -233,7 +247,7 @@ export function MapView({
           const source = map.getSource('cameras')
           const clusterId = Number(cluster.properties.cluster_id)
           if (source instanceof GeoJSONSource && Number.isFinite(clusterId)) {
-            const requestId = navigationId.current
+            const requestId = ++navigationId.current
             void source.getClusterExpansionZoom(clusterId).then((zoom) => {
               const coordinates = cluster.geometry.type === 'Point' ? cluster.geometry.coordinates : null
               if (!coordinates || navigationId.current !== requestId) return
@@ -323,14 +337,29 @@ export function MapView({
     if (!ready || !map || !selectedStation || focusStation === 0) return
     const station = stationByCode(selectedStation)
     if (!station) return
-    navigationId.current += 1
-    const wide = window.innerWidth >= PANEL_BREAKPOINT
-    map.easeTo({
-      center: [station.lon, station.lat],
-      zoom: Math.max(map.getZoom(), 13),
-      padding: { top: 90, right: wide ? 390 : 20, bottom: wide ? 70 : 240, left: 30 },
-      duration: 700,
+    const frame = () => {
+      navigationId.current += 1
+      const wide = window.innerWidth >= PANEL_BREAKPOINT
+      map.easeTo({
+        center: [station.lon, station.lat],
+        zoom: Math.max(map.getZoom(), 13),
+        padding: focusPadding(wide),
+        duration: 700,
+      })
+    }
+    frame()
+    const panel = document.getElementById('detail-panel')
+    if (!panel || window.innerWidth >= PANEL_BREAKPOINT) return
+    const observer = new ResizeObserver(() => {
+      map.easeTo({
+        center: [station.lon, station.lat],
+        zoom: map.getZoom(),
+        padding: focusPadding(false),
+        duration: 300,
+      })
     })
+    observer.observe(panel)
+    return () => observer.disconnect()
   }, [focusStation, ready, selectedStation])
 
   useEffect(() => {

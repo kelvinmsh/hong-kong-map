@@ -15,7 +15,10 @@ type DetailPanelProps = {
 export function DetailPanel({ stationCode, camera, onClose }: DetailPanelProps) {
   if (!stationCode && !camera) return null
   return (
-    <aside className="pointer-events-auto absolute inset-x-3 bottom-14 z-20 flex max-h-[min(58dvh,34rem)] flex-col overflow-hidden rounded-3xl border border-[#e4dccf] bg-[#fffcf7]/97 shadow-[0_16px_50px_rgba(28,25,21,0.16)] sm:inset-x-auto sm:right-3 sm:top-3 sm:max-h-none sm:w-[23rem]">
+    <aside
+      id="detail-panel"
+      className="pointer-events-auto absolute inset-x-3 bottom-14 z-20 flex max-h-[min(58dvh,34rem)] flex-col overflow-hidden rounded-3xl border border-[#e4dccf] bg-[#fffcf7]/97 shadow-[0_16px_50px_rgba(28,25,21,0.16)] md:inset-x-auto md:right-3 md:top-3 md:max-h-none md:w-[23rem]"
+    >
       {stationCode ? <StationCard key={stationCode} code={stationCode} onClose={onClose} /> : null}
       {camera ? <CameraCard key={camera.key} camera={camera} onClose={onClose} /> : null}
     </aside>

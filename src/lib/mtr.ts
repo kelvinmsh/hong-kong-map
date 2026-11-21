@@ -24,24 +24,43 @@ export type BoardLine = {
 }
 
 const RETRY_MS = 1200
+const DEADLINE_MS = 12_000
 
-function wait(ms: number) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms)
+function wait(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms)
+    const abort = () => {
+      clearTimeout(timer)
+      reject(signal.reason)
+    }
+    if (signal.aborted) abort()
+    else signal.addEventListener('abort', abort, { once: true })
   })
 }
 
-async function requestSchedule(line: string, station: string): Promise<Response> {
+async function requestSchedule(line: string, station: string, signal: AbortSignal): Promise<Response> {
   const url = new URL('https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php')
   url.searchParams.set('line', line)
   url.searchParams.set('sta', station)
   url.searchParams.set('lang', 'TC')
-  let response = await fetch(url)
+  let response = await fetch(url, { signal })
   if (response.status === 429) {
-    await wait(RETRY_MS)
-    response = await fetch(url)
+    await wait(RETRY_MS, signal)
+    response = await fetch(url, { signal })
   }
   return response
+}
+
+async function readJson(response: Response, signal: AbortSignal): Promise<unknown> {
+  const body = response.json()
+  if (signal.aborted) throw signal.reason
+  return Promise.race([
+    body,
+    new Promise<never>((resolve, reject) => {
+      void resolve
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    }),
+  ])
 }
 
 function failed(line: string, state: 'rate' | 'error', message: string): BoardLine {
@@ -70,11 +89,12 @@ export async function loadLine(
   titles: { up: string; down: string },
   names: Record<string, string>,
 ): Promise<BoardLine> {
+  const signal = AbortSignal.timeout(DEADLINE_MS)
   try {
-    const response = await requestSchedule(line, station)
+    const response = await requestSchedule(line, station, signal)
     if (response.status === 429) return failed(line, 'rate', '查詢過於頻繁，請稍後再按重新整理。')
     if (!response.ok) return failed(line, 'error', '這條綫的班次暫時未能讀取。')
-    const payload = readPayload(await response.json(), line, station)
+    const payload = readPayload(await readJson(response, signal), line, station)
     const current = payload.block?.currTime ?? ''
     return {
       line,
