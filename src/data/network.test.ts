@@ -30,7 +30,7 @@ describe('MTR network', () => {
     expect(main?.codes).not.toContain('LMC')
     expect(main?.codes[main.codes.indexOf('FOT') + 1]).toBe('UNI')
     expect(branch?.codes).toEqual(['SHS', 'LMC'])
-    expect(spur?.coordinates).toHaveLength(2)
+    expect(spur?.coordinates.length ?? 0).toBeGreaterThan(2)
   })
 
   it('splits the Tseung Kwan O line toward LOHAS Park', () => {
@@ -41,13 +41,22 @@ describe('MTR network', () => {
 
   it('keeps Island Line station spacing within a city block range', () => {
     const line = network.lines.find((item) => item.code === 'ISL')
-    const coordinates = line?.paths[0]?.coordinates ?? []
-    expect(coordinates).toHaveLength(17)
-    for (let index = 1; index < coordinates.length; index += 1) {
-      const metres = distance(coordinates[index - 1], coordinates[index])
+    const codes = line?.paths[0]?.codes ?? []
+    const byCode = new Map(network.stations.map((station) => [station.code, station]))
+    expect(codes).toHaveLength(17)
+    for (let index = 1; index < codes.length; index += 1) {
+      const start = byCode.get(codes[index - 1])
+      const end = byCode.get(codes[index])
+      if (!start || !end) throw new Error('missing island station')
+      const metres = distance([start.lon, start.lat], [end.lon, end.lat])
       expect(metres).toBeGreaterThan(400)
       expect(metres).toBeLessThan(2000)
     }
+  })
+
+  it('draws the Island Line along a curve rather than station-to-station chords', () => {
+    const path = network.lines.find((line) => line.code === 'ISL')?.paths[0]
+    expect(path?.coordinates.length ?? 0).toBeGreaterThan((path?.codes.length ?? 0) * 3)
   })
 
   it('draws a solid path for every line and one racecourse spur', () => {

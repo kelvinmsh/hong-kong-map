@@ -2,8 +2,10 @@
  * Builds the static MTR network used by the map.
  * Station order and names come from the official MTR route file.
  * Coordinates are bbox centers from the Lands Department station polygons.
+ * Line curves follow OpenStreetMap MTR track centre lines.
  * Racecourse is in the Lands data and the next-train API, but not in the route file.
  */
+import { curveSpur, curveThroughStations, distanceToPath, haversine as trackDistance, loadTrackGraphs } from './track-geometry.mjs'
 const ROUTE_URL = 'https://opendata.mtr.com.hk/data/mtr_lines_and_stations.csv'
 const VENUE_URL =
   'https://mapapi.hkmapservice.gov.hk/ogc/wfs/indoor/mtr_venue_polygon?service=WFS&version=1.1.0&request=GetFeature&outputFormat=application/json'
@@ -52,22 +54,8 @@ function sequence(rows, line, direction) {
     .map((row) => row['Station Code'])
 }
 
-function haversine(a, b) {
-  const earth = 6371000
-  const p1 = (a[1] * Math.PI) / 180
-  const p2 = (b[1] * Math.PI) / 180
-  const dp = ((b[1] - a[1]) * Math.PI) / 180
-  const dl = ((b[0] - a[0]) * Math.PI) / 180
-  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2
-  return 2 * earth * Math.asin(Math.sqrt(h))
-}
-
-function project(start, end, point) {
-  const dx = end[0] - start[0]
-  const dy = end[1] - start[1]
-  const length = dx * dx + dy * dy
-  const t = Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length))
-  return [start[0] + t * dx, start[1] + t * dy]
+function round(point) {
+  return [Number(point[0].toFixed(6)), Number(point[1].toFixed(6))]
 }
 
 const [routeText, venuePayload] = await Promise.all([
@@ -140,11 +128,7 @@ const networkLines = LINES.map((line) => {
 
   if (line.code === 'EAL') {
     paths.push({ kind: 'branch', codes: ['SHS', 'LMC'], coordinates: ['SHS', 'LMC'].map(point) })
-    const fot = point('FOT')
-    const uni = point('UNI')
-    const rac = point('RAC')
-    const foot = project(fot, uni, rac).map((value) => Number(value.toFixed(6)))
-    paths.push({ kind: 'spur', codes: ['RAC'], coordinates: [foot, rac] })
+    paths.push({ kind: 'spur', codes: ['RAC'], coordinates: [point('RAC')] })
   }
 
   if (line.code === 'TKL') {
@@ -170,12 +154,35 @@ for (const station of stations.values()) {
   }
 }
 
-const island = networkLines.find((line) => line.code === 'ISL').paths[0].coordinates
-for (let index = 1; index < island.length; index += 1) {
-  const distance = haversine(island[index - 1], island[index])
+const graphs = await loadTrackGraphs()
+for (const line of networkLines) {
+  const graph = graphs.get(line.code)
+  if (!graph) throw new Error(`No OpenStreetMap track for ${line.code}`)
+  for (const path of line.paths) {
+    if (path.kind === 'spur') {
+      const main = line.paths.find((item) => item.kind === 'main')
+      path.coordinates = curveSpur(graph, main.coordinates, point('RAC')).map(round)
+      continue
+    }
+    const curved = curveThroughStations(graph, path.codes.map(point))
+    path.coordinates = curved.map(round)
+    for (const code of path.codes) {
+      const station = point(code)
+      const gap = distanceToPath(station, path.coordinates)
+      if (gap > 500) throw new Error(`${line.code} ${code} is ${Math.round(gap)} m from its track`)
+    }
+  }
+}
+
+const island = networkLines.find((line) => line.code === 'ISL').paths[0]
+for (let index = 1; index < island.codes.length; index += 1) {
+  const distance = trackDistance(point(island.codes[index - 1]), point(island.codes[index]))
   if (distance < 400 || distance > 2000) {
     throw new Error(`Island Line hop ${index} is ${Math.round(distance)} m`)
   }
+}
+if (island.coordinates.length < island.codes.length * 3) {
+  throw new Error('Island Line track is not curved')
 }
 
 const eastRail = networkLines.find((line) => line.code === 'EAL')
@@ -190,7 +197,11 @@ if (eastCodes[eastCodes.indexOf('FOT') + 1] !== 'UNI') {
 
 const payload = {
   generatedAt: new Date().toISOString(),
-  sources: { routes: ROUTE_URL, venues: VENUE_URL },
+  sources: {
+    routes: ROUTE_URL,
+    venues: VENUE_URL,
+    tracks: 'https://www.openstreetmap.org/ (港鐵 route=subway track centre lines)',
+  },
   lines: networkLines,
   stations: [...stations.values()].sort((a, b) => a.zh.localeCompare(b.zh, 'zh-Hant')),
 }
