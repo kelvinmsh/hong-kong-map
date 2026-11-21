@@ -1,7 +1,8 @@
 import { lineByCode, network, stationNames } from '../data/network.ts'
 import { lineSpeed, placeOnTrack, pointAt, sampleStations, trackForDestination } from './along.ts'
-import { parseHongKongTime } from './schedule.ts'
 import type { RawArrival } from './mtr.ts'
+import { SIGHTING_KEEP_MS } from './pacing.ts'
+import { parseHongKongTime } from './schedule.ts'
 
 export type Sighting = {
   line: string
@@ -73,7 +74,7 @@ export function sightingsAtStation(
   return sightings
 }
 
-export function mergeSightings(current: Motion[], sightings: Sighting[], now: number): Motion[] {
+export function mergeSightings(current: Motion[], sightings: Sighting[], seenAt: number, now = seenAt): Motion[] {
   const next = current.map((train) => ({ ...train }))
   for (const sight of sightings) {
     const match = next.find(
@@ -90,16 +91,16 @@ export function mergeSightings(current: Motion[], sightings: Sighting[], now: nu
       match.length = sight.length
       match.color = sight.color
       match.label = sight.label
-      match.seenAt = now
+      match.seenAt = seenAt
     } else {
       next.push({
         ...sight,
         id: `${sight.line}-${sight.direction}-${sight.dest}-${Math.round(sight.distance)}`,
-        seenAt: now,
+        seenAt,
       })
     }
   }
-  return next.filter((train) => now - train.seenAt < 90_000)
+  return next.filter((train) => now - train.seenAt < SIGHTING_KEEP_MS)
 }
 
 export function advanceTrains(trains: Motion[], seconds: number): Motion[] {

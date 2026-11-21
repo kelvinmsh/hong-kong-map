@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { fetchArrivals } from './mtr.ts'
+import { arrivalsFromEntry } from './mtr.ts'
 import { advanceTrains, mergeSightings, sightingsAtStation, trainPoints, watchStations, type Motion } from './movingTrains.ts'
-
-const GAP_MS = 800
+import { SIGHTING_KEEP_MS, TRAIN_MAX_AGE_MS } from './pacing.ts'
+import { scheduleCache } from './scheduleCache.ts'
 
 export function useMovingTrains(enabled: boolean) {
   const [points, setPoints] = useState<ReturnType<typeof trainPoints>>([])
@@ -12,36 +12,48 @@ export function useMovingTrains(enabled: boolean) {
     if (!enabled) return
     let trains: Motion[] = []
     let active = true
-    let timer = 0
     let frame = 0
     let last = performance.now()
-    let carry = 0
+    let drawCarry = 0
+    let pullCarry = 0
+    const seen = new Map<string, number>()
     const jobs = watchStations()
-    let cursor = 0
+    const release = jobs.map((job) => scheduleCache.hold(job.line, job.station, TRAIN_MAX_AGE_MS))
 
-    const poll = async () => {
-      if (!active || jobs.length === 0) return
-      const job = jobs[cursor % jobs.length]
-      cursor += 1
-      if (!job) return
-      const arrivals = await fetchArrivals(job.line, job.station)
+    const pull = () => {
       if (!active) return
-      if (arrivals) {
-        const sightings = sightingsAtStation(job.line, job.station, arrivals, Date.now())
-        trains = mergeSightings(trains, sightings, Date.now())
-        setCount(trains.length)
+      const now = Date.now()
+      const before = trains.length
+      let changed = false
+      for (const job of jobs) {
+        const entry = scheduleCache.peek(job.line, job.station)
+        if (!entry?.ok || now - entry.at > SIGHTING_KEEP_MS) continue
+        const key = `${job.line}:${job.station}`
+        if (seen.get(key) === entry.at) continue
+        const arrivals = arrivalsFromEntry(entry, job.line, job.station)
+        if (!arrivals) continue
+        seen.set(key, entry.at)
+        trains = mergeSightings(trains, sightingsAtStation(job.line, job.station, arrivals, now), entry.at, now)
+        changed = true
       }
-      timer = window.setTimeout(() => void poll(), GAP_MS)
+      trains = trains.filter((train) => now - train.seenAt < SIGHTING_KEEP_MS)
+      if (changed || trains.length !== before) setCount(trains.length)
     }
-    void poll()
+
+    const unsubscribe = scheduleCache.subscribe(pull)
 
     const draw = (now: number) => {
       const seconds = Math.min(0.5, (now - last) / 1000)
       last = now
       trains = advanceTrains(trains, seconds)
-      carry += seconds
-      if (carry >= 0.2) {
-        carry = 0
+      drawCarry += seconds
+      pullCarry += seconds
+      if (pullCarry >= 1) {
+        pullCarry = 0
+        pull()
+      }
+      if (drawCarry >= 0.2) {
+        drawCarry = 0
         setPoints(trainPoints(trains))
       }
       frame = window.requestAnimationFrame(draw)
@@ -50,7 +62,8 @@ export function useMovingTrains(enabled: boolean) {
 
     return () => {
       active = false
-      window.clearTimeout(timer)
+      unsubscribe()
+      for (const done of release) done()
       window.cancelAnimationFrame(frame)
     }
   }, [enabled])

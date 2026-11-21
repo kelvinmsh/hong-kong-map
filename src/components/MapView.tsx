@@ -114,6 +114,7 @@ export function MapView({
       pitch: 0,
       maxPitch: 60,
       attributionControl: false,
+      refreshExpiredTiles: false,
       dragRotate: true,
       pitchWithRotate: true,
       touchPitch: true,

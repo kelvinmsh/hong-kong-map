@@ -111,19 +111,22 @@ export function readPayload(body: unknown, line: string, station: string): LiveP
   }
 }
 
-export function displayTrain(train: LiveTrain, current: string, names: Record<string, string>): DisplayTrain {
+export function displayTrain(train: LiveTrain, current: string, names: Record<string, string>, now?: number): DisplayTrain {
   const notes: string[] = []
   if (train.timeType === 'D') notes.push('開出')
   else if (train.timeType === 'A') notes.push('到站')
   if (train.route === 'RAC') notes.push('經馬場，不經火炭')
   if (train.valid === 'N') notes.push('此刻未能確認')
   const name = names[train.dest]
+  const basis = now ?? parseHongKongTime(current)
+  const arrival = parseHongKongTime(train.time)
+  const minutes = basis == null || arrival == null ? minutesUntil(current, train.time) : Math.round((arrival - basis) / 60000)
   return {
     key: `${train.seq}-${train.dest}-${train.time}-${train.plat}`,
     destination: name ? `往${name}` : `往${train.dest}`,
     platform: train.plat ? `${train.plat} 號月台` : '月台未明',
     clock: clockLabel(train.time),
-    minuteLabel: minuteLabel(minutesUntil(current, train.time), train.timeType),
+    minuteLabel: minuteLabel(minutes, train.timeType),
     notes,
   }
 }

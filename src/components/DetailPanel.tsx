@@ -1,7 +1,8 @@
 import { RefreshCw, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { lineByCode, stationByCode } from '../data/network.ts'
-import { cameraTitle, snapshotSrc, type Camera } from '../lib/cameras.ts'
+import { cameraTitle, snapshotRetryAllowed, snapshotSrc, type Camera } from '../lib/cameras.ts'
+import { SNAPSHOT_SLOT_MS } from '../lib/pacing.ts'
 import { clockLabel } from '../lib/schedule.ts'
 import { useStationBoard } from '../lib/useStationBoard.ts'
 import { Button } from './ui/button.tsx'
@@ -120,11 +121,16 @@ function StationCard({ code, onClose }: { code: string; onClose: () => void }) {
 
 function CameraCard({ camera, onClose }: { camera: Camera; onClose: () => void }) {
   const title = cameraTitle(camera.description, camera.key)
-  const [tick, setTick] = useState(() => Date.now())
-  const [failedTick, setFailedTick] = useState<number | null>(null)
-  const failed = failedTick === tick
+  const [now, setNow] = useState(() => Date.now())
+  const [triedAt, setTriedAt] = useState(() => Date.now())
+  const [failedSlot, setFailedSlot] = useState<number | null>(null)
+  const [attempt, setAttempt] = useState<{ slot: number; at: number } | null>(null)
+  const slot = Math.floor(now / SNAPSHOT_SLOT_MS)
+  const failed = failedSlot === slot
+  const retrying = attempt?.slot === slot
+  const canRetry = failed && snapshotRetryAllowed(triedAt, now)
   useEffect(() => {
-    const timer = window.setInterval(() => setTick(Date.now()), 120_000)
+    const timer = window.setInterval(() => setNow(Date.now()), 15_000)
     return () => window.clearInterval(timer)
   }, [])
 
@@ -143,7 +149,16 @@ function CameraCard({ camera, onClose }: { camera: Camera; onClose: () => void }
             variant="ghost"
             size="icon"
             aria-label="重新載入照片"
-            onClick={() => setTick(Date.now())}
+            title={canRetry ? '再試一次' : '照片約每兩分鐘更新'}
+            disabled={!canRetry}
+            onClick={() => {
+              const at = Date.now()
+              if (!snapshotRetryAllowed(triedAt, at)) return
+              setTriedAt(at)
+              setFailedSlot(null)
+              setAttempt({ slot, at })
+              setNow(at)
+            }}
           >
             <RefreshCw />
           </Button>
@@ -157,14 +172,13 @@ function CameraCard({ camera, onClose }: { camera: Camera; onClose: () => void }
           <p className="rounded-2xl bg-[#f7f3ec] px-3 py-6 text-center text-sm leading-6">暫時沒有這張快拍照片。</p>
         ) : (
           <img
-            key={tick}
-            src={snapshotSrc(camera.url, tick)}
+            src={`${snapshotSrc(camera.url, slot * SNAPSHOT_SLOT_MS)}${retrying && attempt ? `&r=${attempt.at}` : ''}`}
             alt={title}
             width={320}
             height={240}
             referrerPolicy="no-referrer"
             className="w-full rounded-2xl bg-[#efe8dc]"
-            onError={() => setFailedTick(tick)}
+            onError={() => setFailedSlot(slot)}
           />
         )}
         <p className="text-sm leading-6 text-[#5c564e]">

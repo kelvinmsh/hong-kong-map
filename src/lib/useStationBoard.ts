@@ -1,68 +1,84 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { lineByCode, stationNames } from '../data/network.ts'
 import type { StationRecord } from '../data/types.ts'
-import { loadLine, type BoardLine } from './mtr.ts'
+import { toBoardLine, type BoardLine } from './mtr.ts'
+import { BOARD_MAX_AGE_MS } from './pacing.ts'
+import { scheduleCache } from './scheduleCache.ts'
+
+function rateLine(station: StationRecord): BoardLine {
+  return {
+    line: station.lines[0] ?? '',
+    state: 'rate',
+    message: '查詢過於頻繁，請稍後再按重新整理。',
+    url: '',
+    delay: false,
+    current: '',
+    directions: [],
+  }
+}
 
 export function useStationBoard(station: StationRecord | undefined) {
   const [board, setBoard] = useState<BoardLine[]>([])
   const [loading, setLoading] = useState(true)
-  const generation = useRef(0)
-  const tail = useRef(Promise.resolve())
-  const shownStation = useRef(station?.code)
-  if (shownStation.current !== station?.code) {
-    shownStation.current = station?.code
+  const reloadMark = useRef(0)
+  const shown = useRef(station?.code)
+  if (shown.current !== station?.code) {
+    shown.current = station?.code
     setBoard([])
-    setLoading(true)
+    setLoading(Boolean(station))
   }
-
-  const load = useCallback((current: StationRecord, announce: boolean) => {
-    const id = generation.current
-    const run = tail.current.then(async () => {
-      if (generation.current !== id) return
-      if (announce) setLoading(true)
-      try {
-        const rows = await Promise.all(
-          current.lines.map((code) => {
-            const line = lineByCode(code)
-            return loadLine(code, current.code, { up: line?.up ?? '上行', down: line?.down ?? '下行' }, stationNames)
-          }),
-        )
-        if (generation.current === id) setBoard(rows)
-      } finally {
-        if (generation.current === id) setLoading(false)
-      }
-    })
-    tail.current = run.then(
-      () => undefined,
-      () => undefined,
-    )
-    return run
-  }, [])
 
   useEffect(() => {
     if (!station) return
     let active = true
-    let timer = 0
-    const refresh = () => {
-      void load(station, false).then(() => {
-        if (!active) return
-        timer = window.setTimeout(refresh, 15_000)
-      })
+    const release = station.lines.map((line) => scheduleCache.hold(line, station.code, BOARD_MAX_AGE_MS))
+    const apply = () => {
+      if (!active) return
+      const now = Date.now()
+      const pauseUntil = scheduleCache.pauseUntil()
+      const rows = station.lines
+        .map((code) => {
+          const line = lineByCode(code)
+          return toBoardLine(
+            scheduleCache.peek(code, station.code),
+            code,
+            station.code,
+            { up: line?.up ?? '上行', down: line?.down ?? '下行' },
+            stationNames,
+            now,
+            pauseUntil,
+          )
+        })
+        .filter((row): row is BoardLine => row != null)
+      const waiting =
+        pauseUntil <= now &&
+        station.lines.some((line) => {
+          const entry = scheduleCache.peek(line, station.code)
+          if (!entry) return true
+          return reloadMark.current > entry.attemptedAt
+        })
+      setBoard(rows.length === 0 && pauseUntil > now ? [rateLine(station)] : rows)
+      setLoading(waiting)
     }
-    refresh()
+    const unsubscribe = scheduleCache.subscribe(apply)
+    const timer = window.setTimeout(apply, 0)
     return () => {
       active = false
-      generation.current += 1
       window.clearTimeout(timer)
+      unsubscribe()
+      for (const done of release) done()
     }
-  }, [load, station])
+  }, [station])
 
   return {
     board,
     loading,
     reload: () => {
       if (!station) return
-      void load(station, true)
+      const marked = station.lines.some((line) => scheduleCache.requestSoon(line, station.code))
+      if (!marked) return
+      reloadMark.current = Date.now()
+      setLoading(true)
     },
   }
 }

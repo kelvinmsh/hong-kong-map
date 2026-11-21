@@ -96,7 +96,7 @@ export function Chrome({
         {showTrains
           ? trainCount > 0
             ? `沿路軌顯示 ${trainCount} 班車。位置按到站時間推算，不是衛星定位。`
-            : '正在按到站時間把列車放到路軌上…'
+            : '正在逐站查看到站時間，約每 3 秒一站，避免連續查詢港鐵。'
           : '列車顯示已關閉。'}
       </p>
       <details className="mt-2 text-sm">
