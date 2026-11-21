@@ -117,8 +117,9 @@ function StationCard({ code, onClose }: { code: string; onClose: () => void }) {
 
 function CameraCard({ camera, onClose }: { camera: Camera; onClose: () => void }) {
   const title = cameraTitle(camera.description, camera.key)
-  const [failed, setFailed] = useState(false)
   const [tick, setTick] = useState(() => Date.now())
+  const [failedTick, setFailedTick] = useState<number | null>(null)
+  const failed = failedTick === tick
   useEffect(() => {
     const timer = window.setInterval(() => setTick(Date.now()), 120_000)
     return () => window.clearInterval(timer)
@@ -139,10 +140,7 @@ function CameraCard({ camera, onClose }: { camera: Camera; onClose: () => void }
             variant="ghost"
             size="icon"
             aria-label="重新載入照片"
-            onClick={() => {
-              setFailed(false)
-              setTick(Date.now())
-            }}
+            onClick={() => setTick(Date.now())}
           >
             <RefreshCw />
           </Button>
@@ -163,7 +161,7 @@ function CameraCard({ camera, onClose }: { camera: Camera; onClose: () => void }
             height={240}
             referrerPolicy="no-referrer"
             className="w-full rounded-2xl bg-[#efe8dc]"
-            onError={() => setFailed(true)}
+            onError={() => setFailedTick(tick)}
           />
         )}
         <p className="text-sm leading-6 text-[#5c564e]">

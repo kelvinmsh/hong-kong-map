@@ -12,11 +12,11 @@ const LINES = [
   { code: 'AEL', zh: '機場快綫', color: '#1C7670', offset: -5, up: '往博覽館', down: '往香港' },
   { code: 'TCL', zh: '東涌綫', color: '#F7941D', offset: 5, up: '往東涌', down: '往香港' },
   { code: 'TML', zh: '屯馬綫', color: '#9A3B26', offset: -3, up: '往屯門', down: '往烏溪沙' },
-  { code: 'TKL', zh: '將軍澳綫', color: '#6B208B', offset: 3, up: '往寶琳／康城', down: '往北角' },
+  { code: 'TKL', zh: '將軍澳綫', color: '#6B208B', offset: 8, up: '往寶琳／康城', down: '往北角' },
   { code: 'EAL', zh: '東鐵綫', color: '#5EB6E4', offset: 0, up: '往羅湖／落馬洲', down: '往金鐘' },
   { code: 'SIL', zh: '南港島綫', color: '#A3B000', offset: 6, up: '往海怡半島', down: '往金鐘' },
   { code: 'TWL', zh: '荃灣綫', color: '#E2231A', offset: -6, up: '往荃灣', down: '往中環' },
-  { code: 'ISL', zh: '港島綫', color: '#007DC5', offset: 2, up: '往柴灣', down: '往堅尼地城' },
+  { code: 'ISL', zh: '港島綫', color: '#007DC5', offset: -6, up: '往柴灣', down: '往堅尼地城' },
   { code: 'KTL', zh: '觀塘綫', color: '#00AB4E', offset: -2, up: '往調景嶺', down: '往黃埔' },
   { code: 'DRL', zh: '迪士尼綫', color: '#F550A6', offset: 4, up: '往欣澳', down: '往迪士尼' },
 ]

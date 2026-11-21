@@ -15,6 +15,15 @@ import type { Camera } from '../lib/cameras.ts'
 setWorkerUrl(workerUrl)
 
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+const PANEL_BREAKPOINT = 640
+
+function supportsWebGL2() {
+  try {
+    return Boolean(document.createElement('canvas').getContext('webgl2'))
+  } catch {
+    return false
+  }
+}
 
 type MapViewProps = {
   cameras: Camera[]
@@ -36,7 +45,8 @@ function collection<T>(features: T[]) {
 function fitCity(map: MapLibreMap) {
   const bounds = new LngLatBounds()
   for (const station of network.stations) bounds.extend([station.lon, station.lat])
-  const wide = window.innerWidth >= 768
+  const wide = window.innerWidth >= PANEL_BREAKPOINT
+  map.setPadding({ top: 0, right: 0, bottom: 0, left: 0 })
   map.fitBounds(bounds, {
     padding: { top: wide ? 92 : 150, bottom: 78, left: 36, right: wide ? 48 : 28 },
     duration: 700,
@@ -68,13 +78,14 @@ export function MapView({
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
+  const navigationId = useRef(0)
   const handlers = useRef({ onSelectStation, onSelectCamera, onClear })
   const [ready, setReady] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState(() => !supportsWebGL2())
 
   useEffect(() => {
     const container = containerRef.current
-    if (!container) return
+    if (!container || !supportsWebGL2()) return
     const map = new MapLibreMap({
       container,
       style: STYLE,
@@ -92,6 +103,11 @@ export function MapView({
     mapRef.current = map
     const observer = new ResizeObserver(() => map.resize())
     observer.observe(container)
+    let started = false
+
+    map.on('movestart', (event) => {
+      if (event.originalEvent) navigationId.current += 1
+    })
 
     map.on('load', () => {
       map.addSource('rail', { type: 'geojson', data: collection(railFeatures(false)) })
@@ -211,9 +227,10 @@ export function MapView({
           const source = map.getSource('cameras')
           const clusterId = Number(cluster.properties.cluster_id)
           if (source instanceof GeoJSONSource && Number.isFinite(clusterId)) {
+            const requestId = navigationId.current
             void source.getClusterExpansionZoom(clusterId).then((zoom) => {
               const coordinates = cluster.geometry.type === 'Point' ? cluster.geometry.coordinates : null
-              if (!coordinates) return
+              if (!coordinates || navigationId.current !== requestId) return
               map.easeTo({ center: [coordinates[0], coordinates[1]], zoom })
             })
           }
@@ -230,15 +247,17 @@ export function MapView({
       })
 
       fitCity(map)
+      started = true
       setFailed(false)
       setReady(true)
     })
 
     map.on('error', () => {
-      if (!map.loaded()) setFailed(true)
+      if (!started) setFailed(true)
     })
 
     return () => {
+      navigationId.current += 1
       observer.disconnect()
       map.remove()
       mapRef.current = null
@@ -298,7 +317,8 @@ export function MapView({
     if (!ready || !map || !selectedStation || focusStation === 0) return
     const station = stationByCode(selectedStation)
     if (!station) return
-    const wide = window.innerWidth >= 768
+    navigationId.current += 1
+    const wide = window.innerWidth >= PANEL_BREAKPOINT
     map.easeTo({
       center: [station.lon, station.lat],
       zoom: Math.max(map.getZoom(), 13),
@@ -310,6 +330,7 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current
     if (!ready || !map || homeToken === 0) return
+    navigationId.current += 1
     fitCity(map)
   }, [homeToken, ready])
 

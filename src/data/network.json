@@ -260,7 +260,7 @@
       "code": "TKL",
       "zh": "將軍澳綫",
       "color": "#6B208B",
-      "offset": 3,
+      "offset": 8,
       "up": "往寶琳／康城",
       "down": "往北角",
       "paths": [
@@ -588,7 +588,7 @@
       "code": "ISL",
       "zh": "港島綫",
       "color": "#007DC5",
-      "offset": 2,
+      "offset": -6,
       "up": "往柴灣",
       "down": "往堅尼地城",
       "paths": [

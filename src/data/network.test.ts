@@ -52,7 +52,8 @@ describe('MTR network', () => {
 
   it('draws a solid path for every line and one racecourse spur', () => {
     expect(network.lines).toHaveLength(10)
-    expect(railFeatures(false).length).toBeGreaterThanOrEqual(10)
+    const drawn = new Set(railFeatures(false).map((feature) => feature.properties.code))
+    expect(drawn).toEqual(new Set(network.lines.map((line) => line.code)))
     expect(railFeatures(true)).toHaveLength(1)
   })
 })
