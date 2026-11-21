@@ -3,6 +3,7 @@ import { Chrome } from './components/Chrome.tsx'
 import { DetailPanel } from './components/DetailPanel.tsx'
 import { MapView } from './components/MapView.tsx'
 import { loadCameras, type Camera } from './lib/cameras.ts'
+import { useMovingTrains } from './lib/useMovingTrains.ts'
 
 const NO_CAMERAS: Camera[] = []
 
@@ -13,6 +14,8 @@ type CameraLoad = { status: 'loading' } | { status: 'ready'; cameras: Camera[] }
 export default function App() {
   const [showRail, setShowRail] = useState(true)
   const [showCameras, setShowCameras] = useState(true)
+  const [showTrains, setShowTrains] = useState(true)
+  const movingTrains = useMovingTrains(showTrains)
   const [selection, setSelection] = useState<Selection>(null)
   const [homeToken, setHomeToken] = useState(0)
   const [cameraLoad, setCameraLoad] = useState<CameraLoad>({ status: 'loading' })
@@ -58,6 +61,8 @@ export default function App() {
         cameras={cameras}
         showRail={showRail}
         showCameras={showCameras}
+        showTrains={showTrains}
+        trains={movingTrains.points}
         selectedStation={selection?.kind === 'station' ? selection.code : null}
         selectedCamera={selection?.kind === 'camera' ? selection.key : null}
         focusStation={selection?.kind === 'station' ? selection.focus : 0}
@@ -69,10 +74,13 @@ export default function App() {
       <Chrome
         showRail={showRail}
         showCameras={showCameras}
+        showTrains={showTrains}
+        trainCount={movingTrains.count}
         cameraStatus={cameraStatus}
         stationCode={selection?.kind === 'station' ? selection.code : ''}
         onToggleRail={setShowRail}
         onToggleCameras={setShowCameras}
+        onToggleTrains={setShowTrains}
         onStation={(code) => setSelection({ kind: 'station', code, focus: Date.now() })}
         onHome={() => {
           setSelection(null)
@@ -82,7 +90,7 @@ export default function App() {
       {!selection ? (
         <p className="pointer-events-none absolute inset-x-3 bottom-36 z-10 text-center sm:bottom-16">
           <span className="inline-block rounded-full bg-[#fffcf7]/95 px-4 py-2 text-sm shadow">
-            點選車站查看到站班次，點選快拍點查看最新照片。
+            點選車站查看到站班次。彩色圓點是沿路軌移動的列車。
           </span>
         </p>
       ) : null}

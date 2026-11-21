@@ -4,6 +4,7 @@ import {
   LngLatBounds,
   Map as MapLibreMap,
   NavigationControl,
+  Popup,
   setWorkerUrl,
   type MapMouseEvent,
 } from 'maplibre-gl'
@@ -11,6 +12,7 @@ import { useEffect, useRef, useState } from 'react'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { network, railFeatures, stationByCode, stationFeatures } from '../data/network.ts'
 import type { Camera } from '../lib/cameras.ts'
+import type { TrainMarker } from '../lib/movingTrains.ts'
 
 setWorkerUrl(workerUrl)
 
@@ -29,6 +31,8 @@ type MapViewProps = {
   cameras: Camera[]
   showRail: boolean
   showCameras: boolean
+  showTrains: boolean
+  trains: TrainMarker[]
   selectedStation: string | null
   selectedCamera: string | null
   focusStation: number
@@ -77,6 +81,8 @@ export function MapView({
   cameras,
   showRail,
   showCameras,
+  showTrains,
+  trains,
   selectedStation,
   selectedCamera,
   focusStation,
@@ -88,6 +94,7 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const navigationId = useRef(0)
+  const popupRef = useRef<Popup | null>(null)
   const handlers = useRef({ onSelectStation, onSelectCamera, onClear })
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(() => !supportsWebGL2())
@@ -229,8 +236,30 @@ export function MapView({
         },
         paint: { 'text-color': '#1c1915', 'text-halo-color': '#fffcf7', 'text-halo-width': 1.3 },
       })
+      map.addSource('trains', { type: 'geojson', data: collection([]) })
+      map.addLayer({
+        id: 'trains',
+        type: 'circle',
+        source: 'trains',
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 4.5, 14, 8],
+          'circle-color': ['coalesce', ['get', 'color'], '#1c1915'],
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#fffcf7',
+        },
+      })
 
       map.on('click', (event: MapMouseEvent) => {
+        const trainHit = map.queryRenderedFeatures(event.point, { layers: ['trains'] })[0]
+        if (trainHit?.geometry.type === 'Point') {
+          const coordinates = trainHit.geometry.coordinates
+          popupRef.current?.remove()
+          popupRef.current = new Popup({ closeButton: false, offset: 14 })
+            .setLngLat([Number(coordinates[0]), Number(coordinates[1])])
+            .setText(`${String(trainHit.properties.label ?? '列車')}。位置按到站時間沿路軌推算。`)
+            .addTo(map)
+          return
+        }
         const stationHit = map.queryRenderedFeatures(event.point, { layers: ['stations'] })[0]
         if (stationHit) {
           const code = String(stationHit.properties.code ?? '')
@@ -261,7 +290,7 @@ export function MapView({
 
       map.on('mousemove', (event: MapMouseEvent) => {
         const hits = map.queryRenderedFeatures(event.point, {
-          layers: ['stations', 'cameras-point', 'cameras-cluster'],
+          layers: ['stations', 'cameras-point', 'cameras-cluster', 'trains'],
         })
         map.getCanvas().style.cursor = hits.length > 0 ? 'pointer' : ''
       })
@@ -292,6 +321,23 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current
     if (!ready || !map) return
+    const source = map.getSource('trains')
+    if (source instanceof GeoJSONSource) {
+      source.setData(
+        collection(
+          trains.map((train) => ({
+            type: 'Feature' as const,
+            properties: { id: train.id, color: train.color, label: train.label },
+            geometry: { type: 'Point' as const, coordinates: train.coordinates as [number, number] },
+          })),
+        ),
+      )
+    }
+  }, [ready, trains])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || !map) return
     const source = map.getSource('cameras')
     if (source instanceof GeoJSONSource) source.setData(cameraFeatures(cameras))
   }, [cameras, ready])
@@ -301,13 +347,15 @@ export function MapView({
     if (!ready || !map) return
     const rail = showRail ? 'visible' : 'none'
     const camera = showCameras ? 'visible' : 'none'
+    const train = showTrains ? 'visible' : 'none'
     for (const layer of map.getStyle().layers ?? []) {
       if (layer.id.startsWith('rail-') || layer.id === 'stations' || layer.id === 'station-labels') {
         map.setLayoutProperty(layer.id, 'visibility', rail)
       }
       if (layer.id.startsWith('cameras-')) map.setLayoutProperty(layer.id, 'visibility', camera)
+      if (layer.id === 'trains') map.setLayoutProperty(layer.id, 'visibility', train)
     }
-  }, [ready, showCameras, showRail])
+  }, [ready, showCameras, showRail, showTrains])
 
   useEffect(() => {
     const map = mapRef.current

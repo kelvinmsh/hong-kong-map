@@ -83,6 +83,32 @@ function direction(
   return { id, title, trains: showTrains(rows, current, names), empty: rows.length === 0 }
 }
 
+export type RawArrival = { dest: string; ttnt: number }
+
+export async function fetchArrivals(line: string, station: string): Promise<{
+  currTime: string
+  up: RawArrival[]
+  down: RawArrival[]
+} | null> {
+  const signal = AbortSignal.timeout(DEADLINE_MS)
+  try {
+    const response = await requestSchedule(line, station, signal)
+    if (!response.ok) return null
+    const payload = readPayload(await readJson(response, signal), line, station)
+    const rows = (trains: LiveTrain[]): RawArrival[] =>
+      trains
+        .filter((train) => train.valid !== 'N' && train.dest && Number.isFinite(Number(train.ttnt)))
+        .map((train) => ({ dest: train.dest, ttnt: Number(train.ttnt) }))
+    return {
+      currTime: payload.block?.currTime ?? '',
+      up: rows(payload.block?.up ?? []),
+      down: rows(payload.block?.down ?? []),
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function loadLine(
   line: string,
   station: string,

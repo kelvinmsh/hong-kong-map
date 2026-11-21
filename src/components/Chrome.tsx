@@ -6,10 +6,13 @@ import { Switch } from './ui/switch.tsx'
 type ChromeProps = {
   showRail: boolean
   showCameras: boolean
+  showTrains: boolean
+  trainCount: number
   cameraStatus: string
   stationCode: string
   onToggleRail: (value: boolean) => void
   onToggleCameras: (value: boolean) => void
+  onToggleTrains: (value: boolean) => void
   onStation: (code: string) => void
   onHome: () => void
 }
@@ -26,10 +29,13 @@ function hongKongTime() {
 export function Chrome({
   showRail,
   showCameras,
+  showTrains,
+  trainCount,
   cameraStatus,
   stationCode,
   onToggleRail,
   onToggleCameras,
+  onToggleTrains,
   onStation,
   onHome,
 }: ChromeProps) {
@@ -62,6 +68,10 @@ export function Chrome({
           <Switch checked={showCameras} onCheckedChange={onToggleCameras} aria-label="顯示交通快拍" />
           交通快拍
         </label>
+        <label className="flex items-center gap-2 text-sm">
+          <Switch checked={showTrains} onCheckedChange={onToggleTrains} aria-label="顯示移動中的列車" />
+          列車
+        </label>
       </div>
       <label className="mt-3 block text-xs text-[#5c564e]" htmlFor="station-picker">
         選擇車站
@@ -82,6 +92,13 @@ export function Chrome({
         </select>
       </label>
       <p className="mt-2 text-xs leading-5 text-[#5c564e]">{cameraStatus}</p>
+      <p className="text-xs leading-5 text-[#5c564e]">
+        {showTrains
+          ? trainCount > 0
+            ? `沿路軌顯示 ${trainCount} 班車。位置按到站時間推算，不是衛星定位。`
+            : '正在按到站時間把列車放到路軌上…'
+          : '列車顯示已關閉。'}
+      </p>
       <details className="mt-2 text-sm">
         <summary className="cursor-pointer text-[#5c564e]">路綫圖例</summary>
         <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
@@ -97,7 +114,7 @@ export function Chrome({
           </li>
         </ul>
         <p className="mt-2 text-xs leading-5 text-[#5c564e]">
-          色線依車站順序連接。東鐵在上水分岔往羅湖和落馬洲，將軍澳綫在將軍澳分岔往康城。虛線是馬場側線，平日列車不經該站。
+          色線沿真實路軌。列車圓點按到站時間在路軌上移動。東鐵在上水分岔，將軍澳綫往康城有支線。虛線是馬場側線。
         </p>
       </details>
     </header>
