@@ -93,6 +93,8 @@ export function MapView({
       zoom: 10.2,
       minZoom: 9,
       maxZoom: 14,
+      pitch: 0,
+      maxPitch: 0,
       attributionControl: false,
       dragRotate: false,
       pitchWithRotate: false,
@@ -110,6 +112,10 @@ export function MapView({
     })
 
     map.on('load', () => {
+      const extrusions = (map.getStyle().layers ?? [])
+        .filter((layer) => layer.type === 'fill-extrusion')
+        .map((layer) => layer.id)
+      for (const id of extrusions) map.removeLayer(id)
       map.addSource('rail', { type: 'geojson', data: collection(railFeatures(false)) })
       map.addSource('spur', { type: 'geojson', data: collection(railFeatures(true)) })
       map.addSource('stations', { type: 'geojson', data: collection(stationFeatures()) })
